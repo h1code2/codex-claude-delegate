@@ -1,6 +1,6 @@
 {
   "name": "codex-claude-delegate",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Codex supervises and reviews; Claude Code implements all code changes",
   "author": {
     "name": "h1code2"
