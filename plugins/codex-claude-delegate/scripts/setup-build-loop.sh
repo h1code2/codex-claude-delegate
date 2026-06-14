@@ -56,7 +56,8 @@ fi
 TASK_ID="$(date +%Y%m%d-%H%M%S)-${RAND_HEX}"
 MAX_ITER="${DELEGATE_MAX_ITERATIONS:-3}"
 
-rm -f .codex/delegate-loop.lock .codex/delegate-claude-done
+rm -f .codex/delegate-loop.lock .codex/delegate-claude-done \
+  .codex/delegate-run-claude.sh .codex/claude-prompt.txt .codex/delegate-loop-retries
 
 mkdir -p .codex reviews
 

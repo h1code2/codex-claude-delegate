@@ -14,6 +14,7 @@ source "${SCRIPT_DIR}/delegate-lib.sh"
 MODE="${1:-auto}"
 
 load_delegate_state
+rm -f .codex/delegate-loop-retries
 
 case "$MODE" in
   --help|-h)
@@ -44,6 +45,10 @@ HELP
         prepare_delegate_from_plan
         ;;
       delegate)
+        if [ -f ".codex/delegate-claude-done" ]; then
+          echo "Claude delegate already completed. Stop your turn to enter review."
+          exit 0
+        fi
         if [ -f ".codex/delegate-run-claude.sh" ] && [ -f ".codex/claude-prompt.txt" ]; then
           echo "Runner already exists."
           exit 0

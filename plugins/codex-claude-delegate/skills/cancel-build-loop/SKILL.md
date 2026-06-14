@@ -16,6 +16,7 @@ rm -f .codex/delegate-loop.local.md \
       .codex/delegate-loop.lock \
       .codex/delegate-run-claude.sh \
       .codex/claude-prompt.txt \
+      .codex/delegate-spec.md \
       .codex/delegate-claude-done \
       .codex/delegate-loop-retries
 ```

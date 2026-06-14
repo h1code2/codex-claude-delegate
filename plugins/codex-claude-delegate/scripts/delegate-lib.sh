@@ -168,6 +168,7 @@ RUNNER_EOF
 }
 
 prepare_delegate_from_plan() {
+  rm -f .codex/delegate-claude-done .codex/delegate-loop-retries
   write_implement_prompt
   write_claude_runner
   if [ "$PHASE" = "plan" ]; then

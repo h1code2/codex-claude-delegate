@@ -63,6 +63,8 @@ REASON="Delegate loop active (phase: ${PHASE}). Do not edit source code directly
 REASON+="Write specs and reviews under .codex/ or reviews/, and delegate implementation to Claude Code via:"
 REASON+=" bash .codex/delegate-run-claude.sh"
 
-jq -n --arg r "$REASON" '{decision: "block", reason: $r}' 2>/dev/null \
+jq -n --arg r "$REASON" \
+  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}' 2>/dev/null \
+  || jq -n --arg r "$REASON" '{decision: "block", reason: $r}' 2>/dev/null \
   || printf '{"decision":"block","reason":"%s"}\n' "$REASON"
 exit 0
