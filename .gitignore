@@ -1,0 +1,14 @@
+.DS_Store
+*.swp
+*.swo
+
+# Delegate loop runtime artifacts (created in target repos)
+.codex/delegate-loop.local.md
+.codex/delegate-loop.lock
+.codex/delegate-spec.md
+.codex/claude-prompt.txt
+.codex/delegate-run-claude.sh
+.codex/delegate-loop-retries
+.codex/delegate-loop.log
+
+reviews/

@@ -1,0 +1,23 @@
+{
+  "name": "codex-claude-delegate",
+  "version": "0.1.0",
+  "description": "Codex supervises and reviews; Claude Code implements all code changes",
+  "author": {
+    "name": "h1code2"
+  },
+  "repository": "https://github.com/h1code2/codex-claude-delegate",
+  "license": "MIT",
+  "keywords": ["codex", "claude-code", "delegate", "supervisor", "code-review"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Claude Delegate",
+    "shortDescription": "Codex plans and reviews; Claude Code writes code",
+    "longDescription": "Automated build loop where Codex handles planning, supervision, and review while Claude Code performs all implementation work.",
+    "category": "Productivity",
+    "defaultPrompt": [
+      "Use @build-loop to implement a feature with Codex supervising and Claude Code writing the code.",
+      "Use @cancel-build-loop to abort an active delegate loop."
+    ]
+  }
+}

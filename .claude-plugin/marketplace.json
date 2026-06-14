@@ -1,0 +1,17 @@
+{
+  "name": "codex-claude-delegate",
+  "owner": {
+    "name": "h1code2"
+  },
+  "metadata": {
+    "description": "Codex supervises and reviews; Claude Code implements all code"
+  },
+  "plugins": [
+    {
+      "name": "codex-claude-delegate",
+      "source": "./plugins/codex-claude-delegate",
+      "description": "Codex plans and reviews; Claude Code writes all code",
+      "keywords": ["codex", "claude-code", "delegate", "supervisor"]
+    }
+  ]
+}

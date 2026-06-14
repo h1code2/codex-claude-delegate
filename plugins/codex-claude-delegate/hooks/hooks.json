@@ -1,0 +1,30 @@
+{
+  "description": "Delegate loop: Codex supervises, Claude Code implements, Codex reviews",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${PLUGIN_ROOT}/hooks/block-direct-edits.sh\"",
+            "timeout": 10,
+            "statusMessage": "Delegate loop: checking edit policy"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${PLUGIN_ROOT}/hooks/stop-hook.sh\"",
+            "timeout": 30,
+            "statusMessage": "Delegate loop: checking phase..."
+          }
+        ]
+      }
+    ]
+  }
+}
