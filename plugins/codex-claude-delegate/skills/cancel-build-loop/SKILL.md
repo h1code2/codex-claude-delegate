@@ -21,6 +21,7 @@ rm -f .codex/delegate-loop.local.md \
       .codex/delegate-claude-interrupted \
       .codex/delegate-claude-needs-review \
       .codex/delegate-claude-output.log \
+      .codex/delegate-summary.md \
       .codex/delegate-loop.local.md.runner-backup \
       .codex/delegate-loop-retries
 ```

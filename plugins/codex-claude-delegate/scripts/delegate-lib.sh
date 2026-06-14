@@ -5,6 +5,7 @@ set -euo pipefail
 STATE_FILE=".codex/delegate-loop.local.md"
 LOG_FILE=".codex/delegate-loop.log"
 SPEC_FILE=".codex/delegate-spec.md"
+SUMMARY_FILE=".codex/delegate-summary.md"
 
 delegate_log() {
   mkdir -p "$(dirname "$LOG_FILE")"
@@ -59,6 +60,38 @@ transition_phase() {
 
   mv "$temp" "$STATE_FILE"
   delegate_log "Phase transitioned to: $new_phase (iteration=${new_iteration:-$ITERATION})"
+}
+
+write_review_template() {
+  mkdir -p reviews
+  if [ -f "$REVIEW_FILE" ]; then
+    return 0
+  fi
+
+  cat > "$REVIEW_FILE" << REVIEW_EOF
+# Delegate Review — ${TASK_ID}
+
+## Context
+
+- Phase: review
+- Iteration: ${ITERATION}/${MAX_ITERATIONS}
+- Spec: ${SPEC_FILE}
+- Summary: ${SUMMARY_FILE}
+
+## Checks
+
+- [ ] Reviewed \`git diff\`
+- [ ] Reviewed \`git diff --cached\`
+- [ ] Ran or evaluated relevant tests
+- [ ] Checked acceptance criteria
+- [ ] Checked security and error handling
+
+## Findings
+
+- None yet.
+
+## Result: FAIL
+REVIEW_EOF
 }
 
 write_implement_prompt() {
@@ -138,6 +171,7 @@ TIMEOUT_SECONDS="${timeout_seconds}"
 STATE_FILE=".codex/delegate-loop.local.md"
 STATE_BACKUP=".codex/delegate-loop.local.md.runner-backup"
 OUTPUT_FILE=".codex/delegate-claude-output.log"
+SUMMARY_FILE=".codex/delegate-summary.md"
 INTERRUPTED_MARKER=".codex/delegate-claude-interrupted"
 NEEDS_REVIEW_MARKER=".codex/delegate-claude-needs-review"
 CLAUDE_PID=""
@@ -195,6 +229,40 @@ mark_interrupted() {
   else
     log "Claude delegate \$reason; no source changes detected"
   fi
+}
+
+write_summary() {
+  local exit_code="\$1"
+  local elapsed="\$2"
+  local status="completed"
+  if [ "\$exit_code" -ne 0 ]; then
+    status="failed"
+  fi
+
+  {
+    echo "# Delegate Run Summary"
+    echo ""
+    echo "- Task ID: ${TASK_ID}"
+    echo "- Status: \${status}"
+    echo "- Exit code: \${exit_code}"
+    echo "- Elapsed seconds: \${elapsed}"
+    echo "- Prompt: \${PROMPT_FILE}"
+    echo "- Output log: \${OUTPUT_FILE}"
+    echo ""
+    echo "## Changed Files"
+    echo ""
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git status --short 2>/dev/null | sed 's/^/- /' || true
+    else
+      echo "- Not a git repository"
+    fi
+    echo ""
+    echo "## Recent Output"
+    echo ""
+    echo '~~~text'
+    tail -n 80 "\$OUTPUT_FILE" 2>/dev/null || true
+    echo '~~~'
+  } > "\$SUMMARY_FILE"
 }
 
 cleanup_children() {
@@ -259,7 +327,10 @@ log "Claude Code finished (exit=\$EXIT, elapsed=\${ELAPSED}s)"
 restore_state_if_missing
 if [ "\$EXIT" -eq 0 ]; then
   touch .codex/delegate-claude-done
+else
+  mark_interrupted "exited with code \$EXIT"
 fi
+write_summary "\$EXIT" "\$ELAPSED"
 exit "\$EXIT"
 RUNNER_EOF
 

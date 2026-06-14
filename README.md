@@ -19,6 +19,7 @@ The plugin enforces this flow with Codex skills, a Stop hook, and a direct-edit 
 
 ```text
 @build-loop <task>
+  -> Codex asks concise requirement questions when needed
   -> Codex writes .codex/delegate-spec.md
   -> Codex prepares .codex/delegate-run-claude.sh
   -> Claude Code implements via claude -p
@@ -107,6 +108,8 @@ Cancel an active loop:
 
 During the loop:
 
+- Codex asks only requirement questions that materially affect implementation.
+- If requirements are clear, Codex records assumptions and continues.
 - Codex writes only `.codex/` and `reviews/` files.
 - Claude Code writes source changes.
 - Review files must end with `## Result: PASS` or `## Result: FAIL`.
@@ -116,6 +119,7 @@ During the loop:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CLAUDE_BIN` | `/usr/local/bin/claude` | Claude Code CLI path |
+| `DELEGATE_CLARIFY` | `auto` | Requirement questions: `auto`, `always`, or `never` |
 | `DELEGATE_MAX_TURNS` | `30` | Max Claude Code turns per delegate run |
 | `DELEGATE_TIMEOUT_SECONDS` | `1800` | Max seconds before the runner stops Claude and moves changed work to review |
 | `DELEGATE_MAX_ITERATIONS` | `3` | Max review/fix cycles |
@@ -124,6 +128,7 @@ Example:
 
 ```bash
 export CLAUDE_BIN="$(command -v claude)"
+export DELEGATE_CLARIFY=auto
 export DELEGATE_MAX_TURNS=50
 export DELEGATE_TIMEOUT_SECONDS=1800
 ```
@@ -169,6 +174,16 @@ test -x .codex/delegate-run-claude.sh
 | Claude writes files but does not exit | Let the runner timeout, or interrupt it; if source changed, the next Stop hook moves to review |
 | Claude CLI not found | Set `CLAUDE_BIN` or install Claude Code |
 | Existing loop blocks new task | Run `@cancel-build-loop` |
+
+## Utility Skills
+
+```text
+@delegate-status
+@delegate-recover
+```
+
+- `@delegate-status` prints the active phase, markers, generated files, and next action.
+- `@delegate-recover` restores missing state when possible and moves stuck work to the next safe phase.
 
 ## Project Structure
 

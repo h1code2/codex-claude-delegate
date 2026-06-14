@@ -17,6 +17,8 @@
     "category": "Productivity",
     "defaultPrompt": [
       "Use @build-loop to implement a feature with Codex supervising and Claude Code writing the code.",
+      "Use @delegate-status to inspect an active delegate loop.",
+      "Use @delegate-recover to recover a stuck delegate loop.",
       "Use @cancel-build-loop to abort an active delegate loop."
     ]
   }

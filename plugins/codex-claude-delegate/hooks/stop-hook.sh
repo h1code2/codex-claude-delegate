@@ -20,7 +20,9 @@ fail_open() {
   delegate_log "ERROR: $* — failing open"
   rm -f "$STATE_FILE" .codex/delegate-loop.lock \
     .codex/delegate-run-claude.sh .codex/claude-prompt.txt .codex/delegate-loop-retries \
-    .codex/delegate-claude-done
+    .codex/delegate-claude-done .codex/delegate-claude-interrupted \
+    .codex/delegate-claude-needs-review .codex/delegate-loop.local.md.runner-backup \
+    .codex/delegate-claude-output.log
   printf '{}\n'
   exit 0
 }
@@ -91,13 +93,14 @@ After Claude finishes, stop again to enter the review phase." \
         rm -f "$REVIEW_FILE"
       fi
       transition_phase "review"
+      write_review_template
 
       block_with_reason \
         "${REVIEW_REASON} Perform an independent review:
 
 1. Run \`git diff\` and \`git diff --cached\` (and \`git log --oneline -5\` if needed)
 2. Check code quality, tests, security (OWASP top 10), and spec coverage
-3. Write findings to ${REVIEW_FILE} with severity (critical/high/medium/low) and suggested fixes
+3. Complete the generated review template at ${REVIEW_FILE}; include severity (critical/high/medium/low) and suggested fixes
 4. End with \`## Result: PASS\` or \`## Result: FAIL\`
 
 Do not fix source code yourself — only write the review file." \
@@ -189,7 +192,9 @@ Then stop to re-review." \
 
     delegate_log "Delegate loop complete (task_id=$TASK_ID, iterations=$ITERATION)"
     rm -f "$STATE_FILE" .codex/delegate-loop.lock .codex/delegate-run-claude.sh \
-      .codex/claude-prompt.txt .codex/delegate-loop-retries
+      .codex/claude-prompt.txt .codex/delegate-loop-retries \
+      .codex/delegate-claude-interrupted .codex/delegate-claude-needs-review \
+      .codex/delegate-loop.local.md.runner-backup
     printf '{}\n'
     ;;
 

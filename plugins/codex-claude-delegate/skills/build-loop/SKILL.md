@@ -14,9 +14,22 @@ bash "${PLUGIN_ROOT}/scripts/setup-build-loop.sh" "$ARGUMENTS"
 ## Phase 1 — Plan
 
 1. Analyze the task and codebase (read-only exploration)
-2. Write `.codex/delegate-spec.md` with scope, files, acceptance criteria, test plan
-3. **Do not edit source code** — only `.codex/` and `reviews/`
-4. **Immediately after the spec is written**, prepare delegation:
+2. Clarify requirements according to `DELEGATE_CLARIFY` (`auto` by default):
+   - `auto`: ask 2-5 concise questions only when requirements are ambiguous
+   - `always`: ask 2-5 concise questions before writing the spec
+   - `never`: do not ask; record assumptions instead
+   - Do not ask questions that can be answered by reading the codebase
+   - If no material ambiguity exists, state the assumptions and continue
+   - If the user says to use your judgment, continue with explicit assumptions
+3. Write `.codex/delegate-spec.md` with:
+   - task summary
+   - clarifications and assumptions
+   - scope and non-goals
+   - files or areas likely to change
+   - acceptance criteria
+   - test plan
+4. **Do not edit source code** — only `.codex/` and `reviews/`
+5. **Immediately after the spec is written**, prepare delegation:
 
 ```bash
 bash "${PLUGIN_ROOT}/scripts/prepare-delegate.sh"
@@ -60,5 +73,6 @@ bash .codex/delegate-run-claude.sh
 ## Rules
 
 - Never implement features directly — delegate to Claude Code
+- Clarify material requirement ambiguity before writing the spec
 - Always run `prepare-delegate.sh` after writing the spec (do not skip)
 - Trust plugin hooks via `/hooks` on first use
