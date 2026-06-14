@@ -117,6 +117,7 @@ hooks 用于状态流转和源码直接编辑保护。
 | --- | --- | --- |
 | `CLAUDE_BIN` | `/usr/local/bin/claude` | Claude Code CLI 路径 |
 | `DELEGATE_MAX_TURNS` | `30` | 每次 Claude Code 执行的最大 turn 数 |
+| `DELEGATE_TIMEOUT_SECONDS` | `1800` | runner 停止 Claude 并将已修改内容转入审查前的最大秒数 |
 | `DELEGATE_MAX_ITERATIONS` | `3` | 最大审查/修复循环次数 |
 
 示例：
@@ -124,6 +125,7 @@ hooks 用于状态流转和源码直接编辑保护。
 ```bash
 export CLAUDE_BIN="$(command -v claude)"
 export DELEGATE_MAX_TURNS=50
+export DELEGATE_TIMEOUT_SECONDS=1800
 ```
 
 ## 本地开发安装
@@ -164,6 +166,7 @@ test -x .codex/delegate-run-claude.sh
 | 插件列表里看不到 | 重启 Codex，并重新运行 `bash scripts/install-mac.sh` |
 | hooks 没有执行 | 打开 `/hooks` 并信任插件 hooks |
 | Claude runner 不存在 | 运行 `bash "${PLUGIN_ROOT}/scripts/prepare-delegate.sh"` |
+| Claude 已写文件但不退出 | 等 runner 超时，或手动中断；如果源码已变化，下一次 Stop hook 会进入审查 |
 | 找不到 Claude CLI | 设置 `CLAUDE_BIN` 或安装 Claude Code |
 | 已有 loop 阻止新任务 | 运行 `@cancel-build-loop` |
 

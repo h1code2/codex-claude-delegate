@@ -39,7 +39,7 @@ bash "${PLUGIN_ROOT}/scripts/prepare-delegate.sh"
 bash .codex/delegate-run-claude.sh
 ```
 
-Use a long Bash timeout (e.g. 600000ms). After Claude finishes, stop your turn to enter review.
+The runner has its own timeout (`DELEGATE_TIMEOUT_SECONDS`, default 1800). If Claude times out or is interrupted after writing source changes, stop your turn so the hook can move to review.
 
 ## Phase 3 — Review
 

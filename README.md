@@ -117,6 +117,7 @@ During the loop:
 | --- | --- | --- |
 | `CLAUDE_BIN` | `/usr/local/bin/claude` | Claude Code CLI path |
 | `DELEGATE_MAX_TURNS` | `30` | Max Claude Code turns per delegate run |
+| `DELEGATE_TIMEOUT_SECONDS` | `1800` | Max seconds before the runner stops Claude and moves changed work to review |
 | `DELEGATE_MAX_ITERATIONS` | `3` | Max review/fix cycles |
 
 Example:
@@ -124,6 +125,7 @@ Example:
 ```bash
 export CLAUDE_BIN="$(command -v claude)"
 export DELEGATE_MAX_TURNS=50
+export DELEGATE_TIMEOUT_SECONDS=1800
 ```
 
 ## Local Development Install
@@ -164,6 +166,7 @@ test -x .codex/delegate-run-claude.sh
 | Plugin not listed | Restart Codex and run `bash scripts/install-mac.sh` again |
 | Hooks not running | Open `/hooks` and trust the plugin hooks |
 | Claude runner missing | Run `bash "${PLUGIN_ROOT}/scripts/prepare-delegate.sh"` |
+| Claude writes files but does not exit | Let the runner timeout, or interrupt it; if source changed, the next Stop hook moves to review |
 | Claude CLI not found | Set `CLAUDE_BIN` or install Claude Code |
 | Existing loop blocks new task | Run `@cancel-build-loop` |
 

@@ -18,6 +18,10 @@ rm -f .codex/delegate-loop.local.md \
       .codex/claude-prompt.txt \
       .codex/delegate-spec.md \
       .codex/delegate-claude-done \
+      .codex/delegate-claude-interrupted \
+      .codex/delegate-claude-needs-review \
+      .codex/delegate-claude-output.log \
+      .codex/delegate-loop.local.md.runner-backup \
       .codex/delegate-loop-retries
 ```
 

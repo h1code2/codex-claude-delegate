@@ -117,6 +117,7 @@ write_claude_runner() {
   local runner=".codex/delegate-run-claude.sh"
   local claude_bin="${CLAUDE_BIN:-/usr/local/bin/claude}"
   local max_turns="${DELEGATE_MAX_TURNS:-30}"
+  local timeout_seconds="${DELEGATE_TIMEOUT_SECONDS:-1800}"
 
   if [ ! -f "$prompt_file" ]; then
     echo "Error: Missing ${prompt_file}." >&2
@@ -133,6 +134,14 @@ log() { echo "[\$(date -u +"%Y-%m-%dT%H:%M:%SZ")] \$*" >> "\$LOG_FILE"; }
 PROMPT_FILE=".codex/claude-prompt.txt"
 CLAUDE_BIN="${claude_bin}"
 MAX_TURNS="${max_turns}"
+TIMEOUT_SECONDS="${timeout_seconds}"
+STATE_FILE=".codex/delegate-loop.local.md"
+STATE_BACKUP=".codex/delegate-loop.local.md.runner-backup"
+OUTPUT_FILE=".codex/delegate-claude-output.log"
+INTERRUPTED_MARKER=".codex/delegate-claude-interrupted"
+NEEDS_REVIEW_MARKER=".codex/delegate-claude-needs-review"
+CLAUDE_PID=""
+TAIL_PID=""
 
 if [ ! -x "\$CLAUDE_BIN" ] && ! command -v "\$CLAUDE_BIN" >/dev/null 2>&1; then
   echo "ERROR: Claude Code CLI not found at \$CLAUDE_BIN" >&2
@@ -145,6 +154,66 @@ if [ ! -f "\$PROMPT_FILE" ]; then
   exit 1
 fi
 
+mkdir -p .codex
+rm -f "\$INTERRUPTED_MARKER" "\$NEEDS_REVIEW_MARKER"
+if [ -f "\$STATE_FILE" ]; then
+  cp "\$STATE_FILE" "\$STATE_BACKUP"
+fi
+: > "\$OUTPUT_FILE"
+
+restore_state_if_missing() {
+  if [ ! -f "\$STATE_FILE" ] && [ -f "\$STATE_BACKUP" ]; then
+    cp "\$STATE_BACKUP" "\$STATE_FILE"
+    log "Restored missing delegate state from runner backup"
+  fi
+}
+
+has_source_changes() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  git status --porcelain 2>/dev/null | awk '
+    {
+      path = substr(\$0, 4)
+      if (index(path, " -> ") > 0) {
+        split(path, parts, " -> ")
+        path = parts[2]
+      }
+      if (path !~ /^\\.codex(\\/|$)/ && path !~ /^reviews(\\/|$)/) {
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  '
+}
+
+mark_interrupted() {
+  local reason="\$1"
+  touch "\$INTERRUPTED_MARKER"
+  restore_state_if_missing
+  if has_source_changes; then
+    touch "\$NEEDS_REVIEW_MARKER"
+    log "Claude delegate \$reason; source changes detected, review required"
+  else
+    log "Claude delegate \$reason; no source changes detected"
+  fi
+}
+
+cleanup_children() {
+  [ -n "\$TAIL_PID" ] && kill "\$TAIL_PID" >/dev/null 2>&1 || true
+  if [ -n "\$CLAUDE_PID" ] && kill -0 "\$CLAUDE_PID" >/dev/null 2>&1; then
+    kill "\$CLAUDE_PID" >/dev/null 2>&1 || true
+    sleep 1
+    kill -9 "\$CLAUDE_PID" >/dev/null 2>&1 || true
+  fi
+}
+
+on_signal() {
+  cleanup_children
+  mark_interrupted "interrupted"
+  exit 130
+}
+
+trap on_signal INT TERM
+
 log "Starting Claude Code delegate (task_id=${TASK_ID})"
 START=\$(date +%s)
 
@@ -152,12 +221,42 @@ set +e
 "\$CLAUDE_BIN" -p "\$(cat "\$PROMPT_FILE")" \\
   --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \\
   --max-turns "\$MAX_TURNS" \\
-  2>&1 | tee -a "\$LOG_FILE"
-EXIT=\${PIPESTATUS[0]}
+  > "\$OUTPUT_FILE" 2>&1 &
+CLAUDE_PID=\$!
+
+tail -n +1 -f "\$OUTPUT_FILE" 2>/dev/null &
+TAIL_PID=\$!
+
+EXIT=0
+while kill -0 "\$CLAUDE_PID" >/dev/null 2>&1; do
+  NOW=\$(date +%s)
+  if [ "\$TIMEOUT_SECONDS" -gt 0 ] && [ \$((NOW - START)) -ge "\$TIMEOUT_SECONDS" ]; then
+    cleanup_children
+    wait "\$CLAUDE_PID" >/dev/null 2>&1
+    EXIT=124
+    mark_interrupted "timed out after \${TIMEOUT_SECONDS}s"
+    break
+  fi
+  sleep 2
+done
+
+if [ "\$EXIT" -eq 0 ]; then
+  wait "\$CLAUDE_PID"
+  EXIT=\$?
+fi
+
+if [ -n "\$TAIL_PID" ]; then
+  sleep 0.2
+  kill "\$TAIL_PID" >/dev/null 2>&1 || true
+  wait "\$TAIL_PID" >/dev/null 2>&1 || true
+fi
+
+cat "\$OUTPUT_FILE" >> "\$LOG_FILE"
 set -e
 
 ELAPSED=\$(( \$(date +%s) - START ))
 log "Claude Code finished (exit=\$EXIT, elapsed=\${ELAPSED}s)"
+restore_state_if_missing
 if [ "\$EXIT" -eq 0 ]; then
   touch .codex/delegate-claude-done
 fi

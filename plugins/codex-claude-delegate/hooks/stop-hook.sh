@@ -78,15 +78,22 @@ After Claude finishes, stop again to enter the review phase." \
     ;;
 
   delegate)
-    if [ -f ".codex/delegate-claude-done" ]; then
-      rm -f .codex/delegate-run-claude.sh .codex/delegate-claude-done .codex/delegate-loop-retries
+    if [ -f ".codex/delegate-claude-done" ] || [ -f ".codex/delegate-claude-needs-review" ]; then
+      REVIEW_REASON="Implementation phase complete."
+      if [ -f ".codex/delegate-claude-needs-review" ]; then
+        REVIEW_REASON="Claude delegate was interrupted or timed out after writing changes. Review the diff carefully."
+      fi
+
+      rm -f .codex/delegate-run-claude.sh .codex/delegate-claude-done \
+        .codex/delegate-claude-interrupted .codex/delegate-claude-needs-review \
+        .codex/delegate-loop-retries .codex/delegate-loop.local.md.runner-backup
       if [ "$ITERATION" -gt 1 ]; then
         rm -f "$REVIEW_FILE"
       fi
       transition_phase "review"
 
       block_with_reason \
-        "Implementation phase complete. Perform an independent review:
+        "${REVIEW_REASON} Perform an independent review:
 
 1. Run \`git diff\` and \`git diff --cached\` (and \`git log --oneline -5\` if needed)
 2. Check code quality, tests, security (OWASP top 10), and spec coverage

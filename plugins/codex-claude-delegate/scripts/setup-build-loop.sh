@@ -16,6 +16,7 @@ Starts a delegate loop:
 Environment variables:
   CLAUDE_BIN              Path to claude CLI (default: /usr/local/bin/claude)
   DELEGATE_MAX_TURNS      Max agent turns for Claude (default: 30)
+  DELEGATE_TIMEOUT_SECONDS Max seconds for Claude runner, 0 disables (default: 1800)
   DELEGATE_MAX_ITERATIONS Max review/fix cycles (default: 3)
 HELP
 }
@@ -52,7 +53,9 @@ TASK_ID="$(date +%Y%m%d-%H%M%S)-${RAND_HEX}"
 MAX_ITER="${DELEGATE_MAX_ITERATIONS:-3}"
 
 rm -f .codex/delegate-loop.lock .codex/delegate-claude-done \
-  .codex/delegate-run-claude.sh .codex/claude-prompt.txt .codex/delegate-loop-retries
+  .codex/delegate-run-claude.sh .codex/claude-prompt.txt .codex/delegate-loop-retries \
+  .codex/delegate-claude-interrupted .codex/delegate-claude-needs-review \
+  .codex/delegate-loop.local.md.runner-backup .codex/delegate-claude-output.log
 
 mkdir -p .codex reviews
 
