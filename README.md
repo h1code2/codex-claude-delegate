@@ -27,7 +27,7 @@ Phase 4: fix      — (if FAIL) Claude fixes, re-review (max 3 iterations)
 
 - **Codex** desktop app (macOS) or Codex CLI
 - **Claude Code** CLI — already at `/usr/local/bin/claude` on your Mac
-- **jq** — `brew install jq` (required by hooks and setup)
+- **jq** — `brew install jq` (required by hooks and marketplace updates)
 
 ## Install (macOS + Codex Desktop)
 

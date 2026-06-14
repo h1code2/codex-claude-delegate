@@ -20,28 +20,47 @@ mkdir -p "${AGENTS_DIR}"
 rm -rf "${PLUGIN_DEST}"
 ln -sf "${PLUGIN_SRC}" "${PLUGIN_DEST}"
 
-cat > "${MARKETPLACE}" << EOF
+PLUGIN_ENTRY=$(cat << EOF
+{
+  "name": "${PLUGIN_NAME}",
+  "source": {
+    "source": "local",
+    "path": "./.agents/plugins/${PLUGIN_NAME}"
+  },
+  "policy": {
+    "installation": "AVAILABLE",
+    "authentication": "ON_INSTALL"
+  },
+  "category": "Productivity"
+}
+EOF
+)
+
+if [ -f "${MARKETPLACE}" ]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "Error: jq is required to update existing marketplace: ${MARKETPLACE}" >&2
+    echo "Install: brew install jq" >&2
+    exit 1
+  fi
+
+  TMP_MARKETPLACE="$(mktemp)"
+  jq --argjson plugin "${PLUGIN_ENTRY}" '
+    .plugins = ((.plugins // []) | map(select(.name != $plugin.name)) + [$plugin])
+  ' "${MARKETPLACE}" > "${TMP_MARKETPLACE}"
+  mv "${TMP_MARKETPLACE}" "${MARKETPLACE}"
+else
+  cat > "${MARKETPLACE}" << EOF
 {
   "name": "personal-codex-plugins",
   "interface": {
     "displayName": "Personal Codex Plugins"
   },
   "plugins": [
-    {
-      "name": "${PLUGIN_NAME}",
-      "source": {
-        "source": "local",
-        "path": "./.agents/plugins/${PLUGIN_NAME}"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    }
+    ${PLUGIN_ENTRY}
   ]
 }
 EOF
+fi
 
 ensure_config_key() {
   local key="$1"
@@ -51,7 +70,11 @@ ensure_config_key() {
     printf '[features]\n%s = %s\n' "$key" "$value" >> "${CODEX_CONFIG}"
     return
   fi
-  if grep -qE "^${key}[[:space:]]*=" "${CODEX_CONFIG}" 2>/dev/null; then
+  if awk -v key="$key" '
+    /^\[[^]]+\]/ { in_features = ($0 == "[features]") }
+    in_features && $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { found = 1 }
+    END { exit found ? 0 : 1 }
+  ' "${CODEX_CONFIG}"; then
     return
   fi
   if grep -qE '^\[features\]' "${CODEX_CONFIG}"; then

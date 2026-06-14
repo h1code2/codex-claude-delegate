@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "apply_patch",
+        "matcher": "apply_patch|functions.apply_patch|Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",

@@ -31,11 +31,6 @@ if [ -z "$PROMPT" ]; then
   exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "Error: jq is required (brew install jq)" >&2
-  exit 1
-fi
-
 CLAUDE_BIN="${CLAUDE_BIN:-/usr/local/bin/claude}"
 if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
   echo "Warning: Claude Code CLI not found at $CLAUDE_BIN"
