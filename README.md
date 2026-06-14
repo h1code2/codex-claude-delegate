@@ -1,71 +1,78 @@
 # Codex Claude Delegate
 
-A **Codex plugin** that inverts the [claude-review-loop](https://github.com/hamelsmu/claude-review-loop) pattern:
+English | [中文](README.zh-CN.md)
 
-| Role | Agent |
-|------|-------|
-| Plan, supervise, review | **Codex** (desktop or CLI) |
-| Implement all code | **Claude Code** (`claude -p`) |
+Codex Claude Delegate is a Codex plugin that lets Codex supervise implementation while Claude Code writes the code.
 
-## Lifecycle
+## What It Does
+
+| Responsibility | Owner |
+| --- | --- |
+| Plan scope, files, acceptance criteria, and tests | Codex |
+| Implement source changes | Claude Code |
+| Review diffs, tests, security, and spec coverage | Codex |
+| Fix review failures | Claude Code |
+
+The plugin enforces this flow with Codex skills, a Stop hook, and a direct-edit guard.
+
+## Workflow
 
 ```text
 @build-loop <task>
-    ↓
-Phase 1: plan     — Codex writes .codex/delegate-spec.md
-    ↓
-prepare-delegate  — bash prepare-delegate.sh (creates runner)
-    ↓
-Phase 2: delegate — bash .codex/delegate-run-claude.sh
-    ↓
-Phase 3: review   — Codex writes reviews/review-<id>.md
-    ↓
-Phase 4: fix      — (if FAIL) Claude fixes, re-review (max 3 iterations)
+  -> Codex writes .codex/delegate-spec.md
+  -> Codex prepares .codex/delegate-run-claude.sh
+  -> Claude Code implements via claude -p
+  -> Codex reviews into reviews/review-<task_id>.md
+  -> Claude Code fixes if the review ends with FAIL
 ```
 
 ## Requirements
 
-- **Codex** desktop app (macOS) or Codex CLI
-- **Claude Code** CLI — already at `/usr/local/bin/claude` on your Mac
-- **jq** — `brew install jq` (required by hooks and marketplace updates)
-
-## Install (macOS + Codex Desktop)
-
-### Option A — Project-local (recommended for development)
-
-In the repo you want to supervise, copy marketplace + plugins. Codex resolves paths relative to the **repo root**:
+- macOS
+- Codex Desktop or Codex CLI with plugins enabled
+- Claude Code CLI at `/usr/local/bin/claude`
+- `jq` for hooks and marketplace updates
 
 ```bash
-mkdir -p /path/to/your-project/.agents/plugins /path/to/your-project/plugins
-cp /Users/h1code2/Projects/codex-claude-delegate/.agents/plugins/marketplace.json \
-   /path/to/your-project/.agents/plugins/
-cp -R /Users/h1code2/Projects/codex-claude-delegate/plugins/codex-claude-delegate \
-   /path/to/your-project/plugins/
+brew install jq
+npm install -g @anthropic-ai/claude-code
 ```
 
-Restart Codex desktop, open **Plugins**, install **Claude Delegate**.
-
-### Option B — Personal marketplace (all projects)
+## Install
 
 ```bash
-bash /Users/h1code2/Projects/codex-claude-delegate/scripts/install-mac.sh
+git clone https://github.com/h1code2/codex-claude-delegate.git
+cd codex-claude-delegate
+bash scripts/install-mac.sh
 ```
 
-Restart Codex if needed. The script registers the marketplace and installs via Codex CLI.
+Restart Codex Desktop after installation.
 
-**Important:** Codex resolves personal marketplace `source.path` relative to `$HOME`, not `~/.agents/plugins/`. The correct path is `./.agents/plugins/codex-claude-delegate`, not `./codex-claude-delegate`.
-
-Verify installation:
+Verify:
 
 ```bash
 /Applications/Codex.app/Contents/Resources/codex plugin list | grep codex-claude-delegate
 ```
 
-Should show `installed, enabled`.
+Expected result:
 
-### Enable features
+```text
+codex-claude-delegate@personal-codex-plugins  installed, enabled
+```
 
-Ensure `~/.codex/config.toml` includes:
+## Update
+
+```bash
+cd /Users/h1code2/Projects/codex-claude-delegate
+git pull
+bash scripts/install-mac.sh
+```
+
+Restart Codex Desktop after updating.
+
+## Enable Codex Features
+
+The installer adds these keys when missing:
 
 ```toml
 [features]
@@ -73,51 +80,108 @@ plugins = true
 multi_agent = true
 ```
 
-The install script adds these if missing.
+If needed, add them manually to `~/.codex/config.toml`.
 
-### Trust hooks
+## Trust Hooks
 
-On first use in a project, open `/hooks` in Codex and **trust** the plugin hooks.
+On first use in a project:
+
+1. Open `/hooks` in Codex.
+2. Trust the hooks from `codex-claude-delegate`.
+
+The hooks are required for phase transitions and edit protection.
 
 ## Usage
 
-In a Codex thread (desktop or CLI):
+Start a delegated build loop:
 
 ```text
 @build-loop Add JWT authentication with tests
 ```
 
-Or invoke the skill by name after install. To cancel:
+Cancel an active loop:
 
 ```text
 @cancel-build-loop
 ```
 
+During the loop:
+
+- Codex writes only `.codex/` and `reviews/` files.
+- Claude Code writes source changes.
+- Review files must end with `## Result: PASS` or `## Result: FAIL`.
+
 ## Configuration
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| --- | --- | --- |
 | `CLAUDE_BIN` | `/usr/local/bin/claude` | Claude Code CLI path |
-| `DELEGATE_MAX_TURNS` | `30` | Max turns per Claude run |
+| `DELEGATE_MAX_TURNS` | `30` | Max Claude Code turns per delegate run |
 | `DELEGATE_MAX_ITERATIONS` | `3` | Max review/fix cycles |
 
-## Project structure
+Example:
+
+```bash
+export CLAUDE_BIN="$(command -v claude)"
+export DELEGATE_MAX_TURNS=50
+```
+
+## Local Development Install
+
+For plugin development, copy the marketplace and plugin into a test project:
+
+```bash
+mkdir -p /path/to/project/.agents/plugins /path/to/project/plugins
+cp .agents/plugins/marketplace.json /path/to/project/.agents/plugins/
+cp -R plugins/codex-claude-delegate /path/to/project/plugins/
+```
+
+Restart Codex Desktop and install `Claude Delegate` from the Plugins UI.
+
+## Smoke Test
+
+```bash
+tmp=$(mktemp -d)
+cd "$tmp"
+git init
+/Users/h1code2/.agents/plugins/codex-claude-delegate/scripts/setup-build-loop.sh "smoke test"
+cat > .codex/delegate-spec.md <<'EOF'
+# Smoke test
+
+Acceptance criteria:
+- state file exists
+- prompt file exists
+- runner exists
+EOF
+/Users/h1code2/.agents/plugins/codex-claude-delegate/scripts/prepare-delegate.sh
+test -x .codex/delegate-run-claude.sh
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Plugin not listed | Restart Codex and run `bash scripts/install-mac.sh` again |
+| Hooks not running | Open `/hooks` and trust the plugin hooks |
+| Claude runner missing | Run `bash "${PLUGIN_ROOT}/scripts/prepare-delegate.sh"` |
+| Claude CLI not found | Set `CLAUDE_BIN` or install Claude Code |
+| Existing loop blocks new task | Run `@cancel-build-loop` |
+
+## Project Structure
 
 ```text
 codex-claude-delegate/
 ├── .agents/plugins/marketplace.json
 ├── plugins/codex-claude-delegate/
 │   ├── .codex-plugin/plugin.json
-│   ├── skills/build-loop/SKILL.md
-│   ├── skills/cancel-build-loop/SKILL.md
-│   ├── hooks/stop-hook.sh
-│   ├── hooks/block-direct-edits.sh
-│   └── scripts/setup-build-loop.sh
+│   ├── hooks/
+│   ├── scripts/
+│   └── skills/
 ├── scripts/install-mac.sh
-└── README.md
+├── README.md
+└── README.zh-CN.md
 ```
 
-## Inspired by
+## License
 
-- [hamelsmu/claude-review-loop](https://github.com/hamelsmu/claude-review-loop) — Stop hook + runner script pattern
-- [AlessioZazzarini/claude-codex-collab](https://github.com/AlessioZazzarini/claude-codex-collab) — cross-agent bash bridge
+MIT
