@@ -14,6 +14,8 @@ A **Codex plugin** that inverts the [claude-review-loop](https://github.com/hame
     ↓
 Phase 1: plan     — Codex writes .codex/delegate-spec.md
     ↓
+prepare-delegate  — bash prepare-delegate.sh (creates runner)
+    ↓
 Phase 2: delegate — bash .codex/delegate-run-claude.sh
     ↓
 Phase 3: review   — Codex writes reviews/review-<id>.md

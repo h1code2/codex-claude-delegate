@@ -8,19 +8,17 @@
 #   fix      → Codex sends review feedback back to Claude Code
 #
 # Fail-open on errors so users are never trapped.
+# Runner generation is duplicated in prepare-delegate.sh for when Stop does not fire.
 
 set -euo pipefail
 
-LOG_FILE=".codex/delegate-loop.log"
-
-log() {
-  mkdir -p "$(dirname "$LOG_FILE")"
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*" >> "$LOG_FILE"
-}
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../scripts/delegate-lib.sh
+source "${HOOK_DIR}/../scripts/delegate-lib.sh"
 
 fail_open() {
-  log "ERROR: $* — failing open"
-  rm -f .codex/delegate-loop.local.md .codex/delegate-loop.lock \
+  delegate_log "ERROR: $* — failing open"
+  rm -f "$STATE_FILE" .codex/delegate-loop.lock \
     .codex/delegate-run-claude.sh .codex/claude-prompt.txt .codex/delegate-loop-retries \
     .codex/delegate-claude-done
   printf '{}\n'
@@ -30,108 +28,22 @@ fail_open() {
 trap 'fail_open "hook exited via ERR trap (line $LINENO)"' ERR
 
 HOOK_INPUT=$(cat)
-STATE_FILE=".codex/delegate-loop.local.md"
 
 if [ ! -f "$STATE_FILE" ]; then
   printf '{}\n'
   exit 0
 fi
 
-parse_field() {
-  sed -n "s/^${1}: *//p" "$STATE_FILE" | head -1
-}
-
-task_body() {
-  awk '/^---$/{n++; next} n>=2' "$STATE_FILE"
-}
-
-ACTIVE=$(parse_field "active")
-PHASE=$(parse_field "phase")
-TASK_ID=$(parse_field "task_id")
-ITERATION=$(parse_field "iteration")
-MAX_ITERATIONS=$(parse_field "max_iterations")
-
+ACTIVE=$(sed -n 's/^active: *//p' "$STATE_FILE" | head -1)
 if [ "$ACTIVE" != "true" ]; then
   rm -f "$STATE_FILE"
   printf '{}\n'
   exit 0
 fi
 
-if ! echo "$TASK_ID" | grep -qE '^[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'; then
-  fail_open "invalid task_id format: $TASK_ID"
+if ! load_delegate_state; then
+  fail_open "invalid delegate state"
 fi
-
-ITERATION="${ITERATION:-1}"
-MAX_ITERATIONS="${MAX_ITERATIONS:-3}"
-
-transition_phase() {
-  local new_phase="$1"
-  local new_iteration="${2:-}"
-  local temp="${STATE_FILE}.tmp.$$"
-
-  awk -v np="$new_phase" -v ni="$new_iteration" '{
-    if ($0 ~ /^phase:/) { print "phase: " np; next }
-    if (ni != "" && $0 ~ /^iteration:/) { print "iteration: " ni; next }
-    print
-  }' "$STATE_FILE" > "$temp"
-
-  mv "$temp" "$STATE_FILE"
-  log "Phase transitioned to: $new_phase (iteration=${new_iteration:-$ITERATION})"
-}
-
-write_claude_runner() {
-  local prompt_file=".codex/claude-prompt.txt"
-  local runner=".codex/delegate-run-claude.sh"
-  local claude_bin="${CLAUDE_BIN:-/usr/local/bin/claude}"
-  local max_turns="${DELEGATE_MAX_TURNS:-30}"
-
-  if [ ! -f "$prompt_file" ]; then
-    fail_open "missing prompt file: $prompt_file"
-  fi
-
-  cat > "$runner" << RUNNER_EOF
-#!/usr/bin/env bash
-set -euo pipefail
-
-LOG_FILE=".codex/delegate-loop.log"
-log() { echo "[\$(date -u +"%Y-%m-%dT%H:%M:%SZ")] \$*" >> "\$LOG_FILE"; }
-
-PROMPT_FILE=".codex/claude-prompt.txt"
-CLAUDE_BIN="${claude_bin}"
-MAX_TURNS="${max_turns}"
-
-if [ ! -x "\$CLAUDE_BIN" ] && ! command -v "\$CLAUDE_BIN" >/dev/null 2>&1; then
-  echo "ERROR: Claude Code CLI not found at \$CLAUDE_BIN" >&2
-  echo "Install: npm install -g @anthropic-ai/claude-code" >&2
-  exit 1
-fi
-
-if [ ! -f "\$PROMPT_FILE" ]; then
-  echo "ERROR: prompt file missing: \$PROMPT_FILE" >&2
-  exit 1
-fi
-
-log "Starting Claude Code delegate (task_id=${TASK_ID})"
-START=\$(date +%s)
-
-set +e
-"\$CLAUDE_BIN" -p "\$(cat "\$PROMPT_FILE")" \\
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \\
-  --max-turns "\$MAX_TURNS" \\
-  2>&1 | tee -a "\$LOG_FILE"
-EXIT=\${PIPESTATUS[0]}
-set -e
-
-ELAPSED=\$(( \$(date +%s) - START ))
-log "Claude Code finished (exit=\$EXIT, elapsed=\${ELAPSED}s)"
-if [ "\$EXIT" -eq 0 ]; then
-  touch .codex/delegate-claude-done
-fi
-exit "\$EXIT"
-RUNNER_EOF
-
-  chmod +x "$runner"
-}
 
 block_with_reason() {
   local reason="$1"
@@ -140,9 +52,6 @@ block_with_reason() {
     '{decision: "block", reason: $r, systemMessage: $s}' 2>/dev/null \
     || printf '{"decision":"block","reason":"%s","systemMessage":"%s"}\n' "$reason" "$system_msg"
 }
-
-REVIEW_FILE="reviews/review-${TASK_ID}.md"
-SPEC_FILE=".codex/delegate-spec.md"
 
 case "$PHASE" in
   plan)
@@ -153,25 +62,7 @@ case "$PHASE" in
       exit 0
     fi
 
-    mkdir -p .codex reviews
-    cat > .codex/claude-prompt.txt << PROMPT_EOF
-You are Claude Code acting as the implementation engineer. Codex has planned this work; you execute all code changes.
-
-## Task
-$(task_body)
-
-## Spec (from Codex)
-$(cat "$SPEC_FILE")
-
-## Rules
-- Implement the full spec with clean, tested code
-- Run relevant tests before finishing
-- Do not modify .codex/ or reviews/ unless necessary for the task
-- Commit is optional unless the spec requires it
-PROMPT_EOF
-
-    write_claude_runner
-    transition_phase "delegate"
+    prepare_delegate_from_plan || fail_open "prepare_delegate_from_plan failed"
 
     block_with_reason \
       "Planning complete. Run Claude Code to implement (use a long Bash timeout, e.g. 600000ms):
@@ -179,6 +70,8 @@ PROMPT_EOF
 \`\`\`
 bash .codex/delegate-run-claude.sh
 \`\`\`
+
+If the runner is missing, run: bash \"\${PLUGIN_ROOT}/scripts/prepare-delegate.sh\"
 
 After Claude finishes, stop again to enter the review phase." \
       "Delegate Loop [${TASK_ID}] — Phase 2/4: Delegate to Claude Code"
@@ -223,12 +116,27 @@ Do not fix source code yourself — only write the review file." \
 bash .codex/delegate-run-claude.sh
 \`\`\`
 
+If the runner is missing, run: bash \"\${PLUGIN_ROOT}/scripts/prepare-delegate.sh\"
+
 Then stop again to begin review." \
         "Delegate Loop [${TASK_ID}] — Waiting for Claude Code"
       exit 0
     fi
 
-    fail_open "delegate phase missing runner script (task_id=$TASK_ID)"
+    # Recovery: runner missing but spec exists — regenerate
+    if [ -f "$SPEC_FILE" ]; then
+      prepare_delegate_from_plan || fail_open "recovery prepare failed"
+      block_with_reason \
+        "Runner was missing and has been regenerated. Execute:
+
+\`\`\`
+bash .codex/delegate-run-claude.sh
+\`\`\`" \
+        "Delegate Loop [${TASK_ID}] — Runner recovered"
+      exit 0
+    fi
+
+    fail_open "delegate phase missing runner and spec (task_id=$TASK_ID)"
     ;;
 
   review)
@@ -248,7 +156,7 @@ Then stop again to begin review." \
 
     if grep -qiE '## Result:[[:space:]]*FAIL' "$REVIEW_FILE" 2>/dev/null; then
       if [ "$ITERATION" -ge "$MAX_ITERATIONS" ]; then
-        log "Max iterations reached ($MAX_ITERATIONS), completing with open issues (task_id=$TASK_ID)"
+        delegate_log "Max iterations reached ($MAX_ITERATIONS), completing with open issues (task_id=$TASK_ID)"
         rm -f "$STATE_FILE" .codex/delegate-loop.lock .codex/delegate-run-claude.sh \
           .codex/claude-prompt.txt .codex/delegate-loop-retries
         printf '{}\n'
@@ -256,26 +164,7 @@ Then stop again to begin review." \
       fi
 
       NEXT=$((ITERATION + 1))
-      cat > .codex/claude-prompt.txt << PROMPT_EOF
-You are Claude Code fixing issues from a Codex review. Implement all agreed fixes.
-
-## Original task
-$(task_body)
-
-## Spec
-$(cat "$SPEC_FILE" 2>/dev/null || echo "(see prior implementation)")
-
-## Review (iteration ${NEXT})
-$(cat "$REVIEW_FILE")
-
-## Rules
-- Address critical and high severity items first
-- Add or update tests for each fix
-- Run relevant tests before finishing
-PROMPT_EOF
-
-      write_claude_runner
-      transition_phase "delegate" "$NEXT"
+      prepare_delegate_from_review_fail "$NEXT" || fail_open "prepare fix delegate failed"
 
       block_with_reason \
         "Review found issues (iteration ${NEXT}/${MAX_ITERATIONS}). Run Claude Code to fix:
@@ -284,22 +173,23 @@ PROMPT_EOF
 bash .codex/delegate-run-claude.sh
 \`\`\`
 
+If the runner is missing, run: bash \"\${PLUGIN_ROOT}/scripts/prepare-delegate.sh --fix\"
+
 Then stop to re-review." \
         "Delegate Loop [${TASK_ID}] — Phase 4/4: Fix via Claude Code"
       exit 0
     fi
 
-    log "Delegate loop complete (task_id=$TASK_ID, iterations=$ITERATION)"
+    delegate_log "Delegate loop complete (task_id=$TASK_ID, iterations=$ITERATION)"
     rm -f "$STATE_FILE" .codex/delegate-loop.lock .codex/delegate-run-claude.sh \
       .codex/claude-prompt.txt .codex/delegate-loop-retries
     printf '{}\n'
     ;;
 
   fix)
-    # Legacy phase name — treat as delegate
     transition_phase "delegate"
     block_with_reason \
-      "Run Claude Code: bash .codex/delegate-run-claude.sh" \
+      "Run: bash .codex/delegate-run-claude.sh (or prepare-delegate.sh first if missing)" \
       "Delegate Loop [${TASK_ID}] — Delegate"
     ;;
 
